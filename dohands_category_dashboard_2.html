@@ -1,0 +1,338 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>고객사 카테고리 물동량 대시보드 | 두핸즈</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/chartjs-plugin-datalabels/2.2.0/chartjs-plugin-datalabels.min.js"></script>
+<style>
+  :root{
+    --brand:#1E69FF; --brand-deep:#215DB0; --green:#66DB48;
+    --amber:#F5A623; --pink:#E87BA4; --gray:#9AA3AF;
+    --bg:#F5F6F8; --card:#FFFFFF; --ink:#1A1D24; --sub:#5F6673; --line:#E5E8EE;
+  }
+  *{box-sizing:border-box; margin:0; padding:0;}
+  body{font-family:'Pretendard',-apple-system,sans-serif; background:var(--bg); color:var(--ink);
+       padding:28px; line-height:1.5; -webkit-font-smoothing:antialiased;}
+  .wrap{max-width:1180px; margin:0 auto;}
+  header{display:flex; justify-content:space-between; align-items:flex-end; flex-wrap:wrap; gap:12px; margin-bottom:6px;}
+  h1{font-size:22px; font-weight:700; letter-spacing:-0.3px;}
+  h1 span{color:var(--brand);}
+  .meta{font-size:13px; color:var(--sub); display:flex; align-items:center; gap:12px; flex-wrap:wrap;}
+  .meta b{color:var(--ink); font-weight:600;}
+  button{font-family:inherit; font-size:13px; font-weight:600; color:#fff; background:var(--brand);
+         border:none; border-radius:8px; padding:8px 16px; cursor:pointer; transition:.15s;}
+  button:hover{background:var(--brand-deep);}
+  .status{font-size:12px; padding:4px 10px; border-radius:20px; font-weight:600;}
+  .status.ok{background:#E7F0FF; color:var(--brand-deep);}
+  .status.warn{background:#FFF3E0; color:#B26A00;}
+  .status.err{background:#FDE8E8; color:#C0392B;}
+  .kpis{display:grid; grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); gap:14px; margin:20px 0;}
+  .kpi{background:var(--card); border:1px solid var(--line); border-radius:14px; padding:18px 20px;}
+  .kpi .lab{font-size:13px; color:var(--sub); margin-bottom:6px;}
+  .kpi .val{font-size:26px; font-weight:700; letter-spacing:-0.5px;}
+  .kpi .val small{font-size:15px; font-weight:600; color:var(--sub);}
+  .kpi .val.up{color:var(--brand);}
+  .grid{display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-bottom:16px;}
+  .grid.one{grid-template-columns:1fr;}
+  .panel{background:var(--card); border:1px solid var(--line); border-radius:14px; padding:18px 20px;}
+  .panel h3{font-size:15px; font-weight:600; color:var(--brand-deep); margin-bottom:14px;}
+  .chartbox{position:relative; width:100%;}
+  table{width:100%; border-collapse:collapse; font-size:13px;}
+  th,td{padding:9px 10px; text-align:right; border-bottom:1px solid var(--line); white-space:nowrap;}
+  th:first-child,td:first-child{text-align:left;}
+  thead th{background:var(--bg); font-weight:600; color:var(--sub); font-size:12px;}
+  tbody tr.mid td{font-weight:700; background:#FAFBFD;}
+  tfoot td{font-weight:700; border-top:2px solid var(--brand);}
+  .config{background:var(--card); border:1px solid var(--line); border-radius:12px; padding:16px 18px; margin-bottom:18px;}
+  .config code{background:var(--bg); padding:2px 6px; border-radius:4px; font-family:monospace; font-size:12px;}
+  .config label{display:flex; flex-direction:column;}
+  .cfgL{display:block; font-size:12px; color:var(--sub); margin-bottom:5px; font-weight:600;}
+  .config input{width:100%; font-family:inherit; font-size:13px; padding:9px 11px; border:1px solid var(--line); border-radius:8px; outline:none;}
+  .config input:focus{border-color:var(--brand);}
+  .cfgHint{font-size:12px; color:var(--sub); margin-top:10px; line-height:1.6;}
+  .cfgHint b{color:var(--ink);}
+  @media(max-width:820px){.grid{grid-template-columns:1fr;} body{padding:16px;}}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <div>
+      <h1>고객사 카테고리 물동량 <span>대시보드</span></h1>
+      <div class="meta" style="margin-top:6px;">
+        <span>데이터 기준 <b id="periodTxt">–</b></span>
+        <span id="src" class="status warn">샘플 데이터</span>
+        <span id="updated">–</span>
+        <label style="display:flex; align-items:center; gap:6px; cursor:pointer;"><input type="checkbox" id="exclLast" checked style="width:auto; margin:0;"> 집계 중 월(마지막) 제외</label>
+      </div>
+    </div>
+    <button onclick="loadData()">↻ 새로고침</button>
+  </header>
+
+  <div class="config" id="cfgBox">
+    <div style="display:flex; flex-wrap:wrap; gap:12px; align-items:flex-end;">
+      <label style="flex:3; min-width:280px;">
+        <span class="cfgL">구글시트 URL 또는 ID</span>
+        <input id="inUrl" type="text" placeholder="https://docs.google.com/spreadsheets/d/........./edit">
+      </label>
+      <label style="flex:1; min-width:130px;">
+        <span class="cfgL">시트(탭) 이름</span>
+        <input id="inSheet" type="text" placeholder="result">
+      </label>
+      <button id="btnConn" onclick="connectSheet()" style="height:38px;">연동</button>
+    </div>
+    <div class="cfgHint">① 구글시트 <b>공유 → ‘링크가 있는 모든 사용자 · 뷰어’</b> 설정 → ② 위에 URL 붙여넣기 → ③ <b>연동</b> 클릭. 컬럼 헤더는 <code>월 / 카테고리 / 물동량</code> 이름 기준으로 자동 매핑되며, 입력값은 이 브라우저에 저장됩니다.</div>
+  </div>
+
+  <div class="kpis" id="kpis"></div>
+
+  <div class="grid">
+    <div class="panel"><div class="chartbox" style="height:340px;"><canvas id="c_month"></canvas></div></div>
+    <div class="panel"><div class="chartbox" style="height:340px;"><canvas id="c_cum"></canvas></div></div>
+  </div>
+  <div class="grid">
+    <div class="panel"><div class="chartbox" style="height:360px;"><canvas id="c_donut"></canvas></div></div>
+    <div class="panel"><div class="chartbox" style="height:360px;"><canvas id="c_share"></canvas></div></div>
+  </div>
+  <div class="grid one">
+    <div class="panel"><div class="chartbox" style="height:340px;"><canvas id="c_sub"></canvas></div></div>
+  </div>
+
+  <div class="grid">
+    <div class="panel"><h3>중간분류 누적 요약 (건 · 비율)</h3><div id="tblMid"></div></div>
+    <div class="panel"><h3>소분류 누적 요약 (건 · 비율)</h3><div id="tblSub"></div></div>
+  </div>
+
+</div>
+
+<script>
+/* ============================================================
+   ① 구글시트 연동 설정  ─ 여기만 수정하세요
+   ============================================================ */
+let SHEET_ID   = "1UZIliy46zUhqKPpwZTGKjUF7tOGMj65_yPIC0CllKvg";  // 생성된 두핸즈 시트
+let SHEET_NAME = "";                // 빈 값이면 첫 번째 탭(gid=0) 자동 사용
+const POLL_SEC = 0;                 // 자동 새로고침 주기(초). 0=끔, 예:300=5분
+
+/* 저장된 설정 복원 */
+(function(){ try{ const s=JSON.parse(localStorage.getItem('dh_cfg')||'{}');
+  if(s.id) SHEET_ID=s.id; if(s.name) SHEET_NAME=s.name; }catch(e){} })();
+function parseSheetId(v){ if(!v) return ''; const m=v.match(/\/d\/([a-zA-Z0-9-_]+)/); return m?m[1]:v.trim(); }
+function connectSheet(){
+  SHEET_ID   = parseSheetId(document.getElementById('inUrl').value);
+  SHEET_NAME = (document.getElementById('inSheet').value||'result').trim();
+  try{ localStorage.setItem('dh_cfg', JSON.stringify({id:SHEET_ID,name:SHEET_NAME})); }catch(e){}
+  loadData();
+}
+
+/* ② 중간분류 매핑 ─ 규칙 변경 시 여기만 수정 */
+const MID_MAP = {
+  '화장품/미용':'뷰티 & 이너뷰티', '건강/영양제':'뷰티 & 이너뷰티',
+  '출산/육아/어린이':'키즈 & 펫',  '반려동물':'키즈 & 펫',
+  '디지털/가전':'테크 & 레저',     '취미/스포츠':'테크 & 레저',
+  '리빙/인테리어':'홈 & 리빙',     '잡화/공구':'홈 & 리빙', '식품':'홈 & 리빙',
+  '패션잡화':'패션'
+};
+const MID_ORDER = ['뷰티 & 이너뷰티','키즈 & 펫','테크 & 레저','홈 & 리빙','패션','기타'];
+const MID_COLOR = {
+  '뷰티 & 이너뷰티':'#1E69FF','키즈 & 펫':'#66DB48','테크 & 레저':'#215DB0',
+  '홈 & 리빙':'#F5A623','패션':'#E87BA4','기타':'#9AA3AF'
+};
+const midOf = c => MID_MAP[c] || '기타';
+
+/* 샘플 데이터(구글시트 미설정 시 표시) */
+const SAMPLE = [
+["2026-01","건강/영양제",572828],["2026-01","기타",94],["2026-01","디지털/가전",48828],["2026-01","리빙/인테리어",38134],["2026-01","반려동물",35873],["2026-01","식품",27226],["2026-01","잡화/공구",28947],["2026-01","출산/육아/어린이",14730],["2026-01","취미/스포츠",42109],["2026-01","패션잡화",30291],["2026-01","화장품/미용",862660],
+["2026-02","건강/영양제",529343],["2026-02","기타",21],["2026-02","디지털/가전",48241],["2026-02","리빙/인테리어",36469],["2026-02","반려동물",85179],["2026-02","식품",24195],["2026-02","잡화/공구",25876],["2026-02","출산/육아/어린이",15098],["2026-02","취미/스포츠",34482],["2026-02","패션잡화",30312],["2026-02","화장품/미용",820581],
+["2026-03","건강/영양제",647249],["2026-03","기타",21],["2026-03","디지털/가전",60746],["2026-03","리빙/인테리어",55374],["2026-03","반려동물",105914],["2026-03","식품",26074],["2026-03","잡화/공구",31922],["2026-03","출산/육아/어린이",21153],["2026-03","취미/스포츠",35873],["2026-03","패션잡화",41129],["2026-03","화장품/미용",894089],
+["2026-04","건강/영양제",670031],["2026-04","기타",26],["2026-04","디지털/가전",59982],["2026-04","리빙/인테리어",47374],["2026-04","반려동물",95467],["2026-04","식품",28346],["2026-04","잡화/공구",29512],["2026-04","출산/육아/어린이",40067],["2026-04","취미/스포츠",50915],["2026-04","패션잡화",44576],["2026-04","화장품/미용",1025418],
+["2026-05","건강/영양제",648133],["2026-05","기타",8],["2026-05","디지털/가전",68019],["2026-05","리빙/인테리어",53591],["2026-05","반려동물",106118],["2026-05","식품",24843],["2026-05","잡화/공구",31364],["2026-05","출산/육아/어린이",47836],["2026-05","취미/스포츠",58109],["2026-05","패션잡화",48232],["2026-05","화장품/미용",911943],
+["2026-06","건강/영양제",598500],["2026-06","기타",21],["2026-06","디지털/가전",83251],["2026-06","리빙/인테리어",54604],["2026-06","반려동물",105347],["2026-06","식품",35095],["2026-06","잡화/공구",32490],["2026-06","출산/육아/어린이",92383],["2026-06","취미/스포츠",72716],["2026-06","패션잡화",57580],["2026-06","화장품/미용",894294],
+["2026-07","건강/영양제",622559],["2026-07","기타",115],["2026-07","디지털/가전",94013],["2026-07","리빙/인테리어",64710],["2026-07","반려동물",122752],["2026-07","식품",45328],["2026-07","잡화/공구",34080],["2026-07","출산/육아/어린이",100968],["2026-07","취미/스포츠",92777],["2026-07","패션잡화",48725],["2026-07","화장품/미용",925738]
+];
+
+/* ============================================================
+   유틸
+   ============================================================ */
+const NF = n => Math.round(n).toLocaleString('ko-KR');
+const PF = n => n.toFixed(1) + '%';
+const normMonth = v => {
+  if (v == null) return '';
+  if (typeof v === 'object' && v.getMonth) return v.getFullYear()+'-'+String(v.getMonth()+1).padStart(2,'0');
+  const s = String(v);
+  const m = s.match(/Date\((\d+),(\d+),(\d+)/);
+  if (m) return m[1]+'-'+String(+m[2]+1).padStart(2,'0');
+  return s.slice(0,7);
+};
+Chart.register(ChartDataLabels);
+Chart.defaults.font.family = "'Pretendard',sans-serif";
+Chart.defaults.color = '#5F6673';
+let charts = {};
+let LAST_ROWS = [];
+const destroy = id => { if(charts[id]) charts[id].destroy(); };
+
+/* ============================================================
+   데이터 로드 (구글시트 gviz JSON → 실패 시 샘플)
+   ============================================================ */
+async function loadData(){
+  let rows, live=false;
+  if (SHEET_ID){
+    try{
+      const tab = SHEET_NAME ? `&sheet=${encodeURIComponent(SHEET_NAME)}` : `&gid=0`;
+      const url = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:json${tab}`;
+      const txt = await (await fetch(url)).text();
+      const json = JSON.parse(txt.substring(txt.indexOf('{'), txt.lastIndexOf('}')+1));
+      const cols = json.table.cols.map(c => (c.label||'').trim());
+      const iM = cols.findIndex(c=>c.includes('월'));
+      const iC = cols.findIndex(c=>c.includes('카테고리'));
+      const iV = cols.findIndex(c=>c.includes('물동량'));
+      rows = json.table.rows.map(r=>[
+        normMonth(r.c[iM] && (r.c[iM].v ?? r.c[iM].f)),
+        r.c[iC] && (r.c[iC].v ?? r.c[iC].f),
+        Number(r.c[iV] && (r.c[iV].v ?? 0)) || 0
+      ]).filter(r=>r[0] && r[1]);
+      live = true;
+    }catch(e){ rows = SAMPLE; console.warn('시트 로드 실패, 샘플 사용:', e); }
+  } else { rows = SAMPLE; }
+
+  const badge = document.getElementById('src');
+  badge.className = 'status ' + (live?'ok':'warn');
+  badge.textContent = live ? '구글시트 연동 중' : '샘플 데이터';
+  const now = new Date();
+  document.getElementById('updated').textContent = '갱신 ' + now.toLocaleString('ko-KR');
+  LAST_ROWS = rows;
+  render(rows);
+}
+
+/* ============================================================
+   집계 + 렌더
+   ============================================================ */
+function render(rows){
+  let excludedNote='';
+  const exclLast = document.getElementById('exclLast') && document.getElementById('exclLast').checked;
+  const allM=[...new Set(rows.map(r=>r[0]))].sort();
+  if(exclLast && allM.length>1){ const drop=allM[allM.length-1]; rows=rows.filter(r=>r[0]!==drop); excludedNote=' (최근 '+drop+' 제외)'; }
+  const months = [...new Set(rows.map(r=>r[0]))].sort();
+  const cats   = [...new Set(rows.map(r=>r[1]))];
+  const key = (m,c)=>m+'|'+c;
+  const cell = {}; rows.forEach(r=> cell[key(r[0],r[1])] = (cell[key(r[0],r[1])]||0)+r[2]);
+
+  // 월별 중간분류
+  const midMonthly = {}; MID_ORDER.forEach(m=> midMonthly[m]=months.map(()=>0));
+  months.forEach((mo,i)=> cats.forEach(c=> midMonthly[midOf(c)][i] += (cell[key(mo,c)]||0)));
+  const monthTotal = months.map((mo,i)=> MID_ORDER.reduce((s,m)=>s+midMonthly[m][i],0));
+  const grand = monthTotal.reduce((a,b)=>a+b,0);
+
+  // 누적(중간분류) & 누적총계
+  const midCum = {}; MID_ORDER.forEach(m=>{ let s=0; midCum[m]=midMonthly[m].map(v=>s+=v); });
+  let cs=0; const cumTotal = monthTotal.map(v=>cs+=v);
+
+  // 카테고리 누적
+  const catTot = {}; cats.forEach(c=> catTot[c]=months.reduce((s,mo)=>s+(cell[key(mo,c)]||0),0));
+  const midTot = {}; MID_ORDER.forEach(m=> midTot[m]=midCum[m][months.length-1]||0);
+
+  document.getElementById('periodTxt').textContent = months[0]+' ~ '+months[months.length-1]+excludedNote;
+  const mLab = months.map(m=> (+m.slice(5))+'월');
+
+  /* KPI */
+  const top = MID_ORDER.slice().sort((a,b)=>midTot[b]-midTot[a])[0];
+  const mom = monthTotal.length>1 ? (monthTotal[monthTotal.length-1]/monthTotal[monthTotal.length-2]-1)*100 : 0;
+  document.getElementById('kpis').innerHTML = `
+    <div class="kpi"><div class="lab">누적 총 물동량</div><div class="val">${NF(grand)}</div></div>
+    <div class="kpi"><div class="lab">월평균</div><div class="val">${NF(grand/months.length)}</div></div>
+    <div class="kpi"><div class="lab">최대 중간분류 · 비중</div><div class="val">${top.split(' ')[0]} <small>${PF(midTot[top]/grand*100)}</small></div></div>
+    <div class="kpi"><div class="lab">최근월 MoM</div><div class="val up">${(mom>=0?'+':'')+mom.toFixed(1)}%</div></div>`;
+
+  const titleOpt = t => ({display:true, text:t, color:'#215DB0', font:{size:15,weight:'600'}, padding:{bottom:14}});
+
+  /* ① 월별 물동량 – 중간분류 누적 막대 (값 표시) */
+  destroy('c_month');
+  charts.c_month = new Chart(c_month,{type:'bar',
+    data:{labels:mLab, datasets:MID_ORDER.map(m=>({label:m,data:midMonthly[m],backgroundColor:MID_COLOR[m]}))},
+    options:{responsive:true,maintainAspectRatio:false,
+      plugins:{title:titleOpt('월별 물동량 (중간분류)'),
+        legend:{position:'bottom',labels:{boxWidth:10,boxHeight:10,font:{size:11}}},
+        tooltip:{callbacks:{label:c=>c.dataset.label+': '+NF(c.parsed.y)}},
+        datalabels:{color:'#fff',font:{size:10,weight:'600'},
+          formatter:(v)=> v> grand*0.012 ? NF(v):'', display:c=>c.dataset.data[c.dataIndex]>grand*0.012}},
+      scales:{x:{stacked:true,grid:{display:false}},
+              y:{stacked:true,grid:{color:'#EEF1F6'},ticks:{callback:v=>(v/1e6)+'M'}}}}});
+
+  /* ② 누적 물동량 추이 (값 표시) */
+  destroy('c_cum');
+  charts.c_cum = new Chart(c_cum,{type:'line',
+    data:{labels:mLab,datasets:[{label:'누적',data:cumTotal,borderColor:'#1E69FF',
+      backgroundColor:'rgba(30,105,255,.10)',fill:true,tension:.3,borderWidth:2.5,
+      pointRadius:4,pointBackgroundColor:'#1E69FF'}]},
+    options:{responsive:true,maintainAspectRatio:false,
+      plugins:{title:titleOpt('누적 물동량 추이'),legend:{display:false},
+        tooltip:{callbacks:{label:c=>'누적: '+NF(c.parsed.y)}},
+        datalabels:{align:'top',color:'#215DB0',font:{size:10,weight:'600'},formatter:v=>NF(v)}},
+      scales:{x:{grid:{display:false}},y:{grid:{color:'#EEF1F6'},ticks:{callback:v=>(v/1e6)+'M'}}}}});
+
+  /* ③ 누적 중간분류 비중 (도넛, % + 건) */
+  destroy('c_donut');
+  const dOrder = MID_ORDER.filter(m=>midTot[m]>0);
+  charts.c_donut = new Chart(c_donut,{type:'doughnut',
+    data:{labels:dOrder,datasets:[{data:dOrder.map(m=>midTot[m]),
+      backgroundColor:dOrder.map(m=>MID_COLOR[m]),borderColor:'#fff',borderWidth:2}]},
+    options:{responsive:true,maintainAspectRatio:false,cutout:'58%',
+      plugins:{title:titleOpt('누적 중간분류 비중'),
+        legend:{position:'right',labels:{boxWidth:10,boxHeight:10,font:{size:11}}},
+        tooltip:{callbacks:{label:c=>c.label+': '+NF(c.parsed)+' ('+PF(c.parsed/grand*100)+')'}},
+        datalabels:{color:'#fff',font:{size:11,weight:'700'},
+          formatter:(v)=>{const p=v/grand*100; return p>=4?p.toFixed(1)+'%':'';}}}}});
+
+  /* ④ 누적 비중 추이 (100% 누적 막대, % 표시) */
+  destroy('c_share');
+  charts.c_share = new Chart(c_share,{type:'bar',
+    data:{labels:mLab,datasets:MID_ORDER.map(m=>({label:m,
+      data:midCum[m].map((v,i)=> v/cumTotal[i]*100),backgroundColor:MID_COLOR[m]}))},
+    options:{responsive:true,maintainAspectRatio:false,
+      plugins:{title:titleOpt('누적 비중 추이 (%)'),
+        legend:{position:'bottom',labels:{boxWidth:10,boxHeight:10,font:{size:11}}},
+        tooltip:{callbacks:{label:c=>c.dataset.label+': '+PF(c.parsed.y)}},
+        datalabels:{color:'#fff',font:{size:9.5,weight:'600'},
+          formatter:v=> v>=6? v.toFixed(0)+'%':'', display:c=>c.dataset.data[c.dataIndex]>=6}},
+      scales:{x:{stacked:true,grid:{display:false}},
+              y:{stacked:true,max:100,grid:{color:'#EEF1F6'},ticks:{callback:v=>v+'%'}}}}});
+
+  /* ⑤ 소분류 누적 (가로 막대, 건 + %) */
+  destroy('c_sub');
+  const subSorted = cats.slice().sort((a,b)=>catTot[b]-catTot[a]);
+  charts.c_sub = new Chart(c_sub,{type:'bar',
+    data:{labels:subSorted,datasets:[{data:subSorted.map(c=>catTot[c]),
+      backgroundColor:subSorted.map(c=>MID_COLOR[midOf(c)]),borderRadius:4}]},
+    options:{indexAxis:'y',responsive:true,maintainAspectRatio:false,
+      plugins:{title:titleOpt('소분류 누적 물동량 (건 · 비율)'),legend:{display:false},
+        tooltip:{callbacks:{label:c=>NF(c.parsed.x)+' ('+PF(c.parsed.x/grand*100)+')'}},
+        datalabels:{anchor:'end',align:'end',color:'#5F6673',font:{size:10,weight:'600'},clamp:true,
+          formatter:v=>NF(v)+' · '+(v/grand*100).toFixed(1)+'%'}},
+      scales:{x:{grid:{color:'#EEF1F6'},ticks:{callback:v=>(v/1e6)+'M'},
+                 suggestedMax:Math.max(...subSorted.map(c=>catTot[c]))*1.18},
+              y:{grid:{display:false},ticks:{font:{size:11}}}}}});
+
+  /* 표 */
+  let mid=`<table><thead><tr><th>중간분류</th><th>누적(건)</th><th>비율</th></tr></thead><tbody>`;
+  MID_ORDER.filter(m=>midTot[m]>0).sort((a,b)=>midTot[b]-midTot[a]).forEach(m=>
+    mid+=`<tr class="mid"><td>${m}</td><td>${NF(midTot[m])}</td><td>${PF(midTot[m]/grand*100)}</td></tr>`);
+  mid+=`</tbody><tfoot><tr><td>합계</td><td>${NF(grand)}</td><td>100.0%</td></tr></tfoot></table>`;
+  document.getElementById('tblMid').innerHTML = mid;
+
+  let sub=`<table><thead><tr><th>소분류</th><th>중간분류</th><th>누적(건)</th><th>비율</th></tr></thead><tbody>`;
+  subSorted.forEach(c=> sub+=`<tr><td>${c}</td><td style="text-align:left;color:var(--sub)">${midOf(c)}</td><td>${NF(catTot[c])}</td><td>${PF(catTot[c]/grand*100)}</td></tr>`);
+  sub+=`</tbody><tfoot><tr><td colspan="2">합계</td><td>${NF(grand)}</td><td>100.0%</td></tr></tfoot></table>`;
+  document.getElementById('tblSub').innerHTML = sub;
+}
+
+document.getElementById('inUrl').value = SHEET_ID;
+document.getElementById('inSheet').value = SHEET_NAME;
+document.getElementById('exclLast').addEventListener('change', ()=>render(LAST_ROWS));
+loadData();
+if (POLL_SEC>0) setInterval(loadData, POLL_SEC*1000);
+</script>
+</body>
+</html>
